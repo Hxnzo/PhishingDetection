@@ -30,7 +30,7 @@ def load_detector():
 def main():
     st.set_page_config(page_title="Phishing Detection System", page_icon="🛡️", layout="wide")
     
-    st.title("🛡️ Advanced Phishing Detection System")
+    st.title("🛡️ PhishDetect Application")
     st.markdown("""
     This application uses machine learning to detect phishing websites with high accuracy. 
     It employs a weighted ensemble of Random Forest, Support Vector Machine, and Neural Network models.

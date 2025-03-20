@@ -9,7 +9,7 @@ from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import StandardScaler
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.svm import SVC
-from sklearn.metrics import accuracy_score, confusion_matrix, roc_curve, precision_recall_curve
+from sklearn.metrics import accuracy_score, confusion_matrix, roc_curve, precision_recall_curve, auc, average_precision_score, precision_score, recall_score, f1_score
 import tensorflow as tf
 from sklearn.decomposition import PCA
 import matplotlib.pyplot as plt
@@ -186,12 +186,20 @@ class PhishingDetector:
     
     def create_dataset(self, legitimate_urls_file, phishing_urls_file, output_file='phishing_dataset.csv'):
         """
-        Create a dataset from lists of legitimate and phishing URLs
+        Create a dataset from legitimate and phishing URLs
         """
+        # Make sure the data directory exists
+        data_dir = "data"
+        if not os.path.exists(data_dir):
+            os.makedirs(data_dir)
+            
+        # Full path for the output file
+        output_file_path = os.path.join(data_dir, output_file)
+        
         # Load URLs
         legitimate_urls = pd.read_csv(legitimate_urls_file, header=None)[0].tolist()
         phishing_urls = pd.read_csv(phishing_urls_file, header=None)[0].tolist()
-        
+
         data = []
         
         # Process legitimate URLs
@@ -218,21 +226,34 @@ class PhishingDetector:
             except Exception as e:
                 print(f"Error processing {url}: {str(e)}")
         
-        # Create DataFrame and save to CSV
+        # Create DataFrame
         df = pd.DataFrame(data)
-        df.to_csv(output_file, index=False)
-        print(f"Dataset created and saved to {output_file}")
+        
+        # Save DataFrame to CSV in the data directory
+        df.to_csv(output_file_path, index=False)
+        print(f"Dataset created and saved to {output_file_path}")
+        
         return df
-    
+
     def load_or_create_dataset(self, legitimate_urls_file, phishing_urls_file, output_file='phishing_dataset.csv'):
         """
-        Load dataset if it exists, otherwise create it
+        Load dataset if it exists, otherwise create it.
         """
-        if os.path.exists(output_file):
-            print(f"Loading existing dataset from {output_file}")
-            return pd.read_csv(output_file)
+        # Create data directory if it doesn't exist
+        data_dir = "data"
+        if not os.path.exists(data_dir):
+            os.makedirs(data_dir)
+            
+        # Full path for the dataset file
+        dataset_path = os.path.join(data_dir, output_file)
+        
+        if os.path.exists(dataset_path):
+            print(f"Loading existing dataset from {dataset_path}")
+            return pd.read_csv(dataset_path)
         else:
+            print(f"Dataset not found, creating new dataset...")
             return self.create_dataset(legitimate_urls_file, phishing_urls_file, output_file)
+
     
     def train_models(self, legitimate_urls, phishing_urls, test_size=0.2, random_state=42, rf_estimators=200, svm_kernel='rbf', nn_epochs=50):
         """
@@ -269,6 +290,11 @@ class PhishingDetector:
         
         # Create DataFrame
         dataset = pd.DataFrame(data)
+        
+        # Save the dataset for future use
+        os.makedirs('data', exist_ok=True)
+        dataset.to_csv('data/phishing_dataset.csv', index=False)
+        print("Dataset saved to data/phishing_dataset.csv")
         
         # Prepare data
         X = dataset.drop('is_phishing', axis=1)
@@ -464,8 +490,44 @@ class PhishingDetector:
         fig_cm.savefig(cm_plot_path)
         plt.close(fig_cm)
         print(f"Saved confusion matrix to {cm_plot_path}")
+
+        # 1) ROC Curve
+        fpr, tpr, _ = roc_curve(y_test, ensemble_avg)
+        roc_auc = auc(fpr, tpr)
+
+        fig_roc, ax_roc = plt.subplots(figsize=(6, 5))
+        ax_roc.plot(fpr, tpr, color='orange', label=f'ROC curve (AUC = {roc_auc:.3f})')
+        ax_roc.plot([0, 1], [0, 1], color='navy', linestyle='--')
+        ax_roc.set_xlim([0.0, 1.0])
+        ax_roc.set_ylim([0.0, 1.05])
+        ax_roc.set_xlabel('False Positive Rate')
+        ax_roc.set_ylabel('True Positive Rate')
+        ax_roc.set_title('Receiver Operating Characteristic (ROC) Curve')
+        ax_roc.legend(loc="lower right")
+        roc_curve_path = os.path.join('images', 'roc_curve.png')
+        fig_roc.savefig(roc_curve_path)
+        plt.close(fig_roc)
+        print(f"Saved ROC curve to {roc_curve_path}")
+
+        # 2) Precision-Recall Curve
+        precision, recall, _ = precision_recall_curve(y_test, ensemble_avg)
+        avg_precision = average_precision_score(y_test, ensemble_avg)
+
+        fig_pr, ax_pr = plt.subplots(figsize=(6, 5))
+        ax_pr.plot(recall, precision, color='blue', label=f'Precision-Recall curve (AP = {avg_precision:.3f})')
+        ax_pr.set_xlim([0.0, 1.0])
+        ax_pr.set_ylim([0.0, 1.05])
+        ax_pr.set_xlabel('Recall')
+        ax_pr.set_ylabel('Precision')
+        ax_pr.set_title('Precision-Recall Curve')
+        ax_pr.legend(loc="lower left")
+        pr_curve_path = os.path.join('images', 'precision_recall_curve.png')
+        fig_pr.savefig(pr_curve_path)
+        plt.close(fig_pr)
+        print(f"Saved Precision-Recall curve to {pr_curve_path}")
+
+        #----------------------------------------------------------------------
         
-        from sklearn.metrics import precision_score, recall_score, f1_score
         precision = precision_score(y_test, ensemble_pred)
         recall = recall_score(y_test, ensemble_pred)
         f1 = f1_score(y_test, ensemble_pred)
